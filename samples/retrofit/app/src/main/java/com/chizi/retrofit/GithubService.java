@@ -3,6 +3,7 @@ package com.chizi.retrofit;
 import java.io.IOException;
 import java.util.List;
 
+import retrofit2.Call;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
@@ -29,7 +30,8 @@ public class GithubService {
     }
 
     public List<RepoBean> getRepos(String user) throws IOException {
-        return mGithubApi.getRepos(user).execute().body();
+        Call<List<RepoBean>> reposCall = mGithubApi.getRepos(user);
+        return reposCall.execute().body();
     }
 
 }

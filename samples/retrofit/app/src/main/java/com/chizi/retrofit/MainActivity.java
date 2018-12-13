@@ -2,6 +2,7 @@ package com.chizi.retrofit;
 
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -10,6 +11,8 @@ import java.io.IOException;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String TAG = "MainActivity";
 
     private Button mTestButton;
     private TextView mContentTextView;
@@ -43,6 +46,10 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 try {
                     List<RepoBean> repoList = GithubService.newInstance().getRepos("chizidegit");
+                    if (repoList == null) {
+                        Log.w(TAG, "get repos return null.");
+                        return;
+                    }
                     setResultData(repoList);
                 } catch (IOException e) {
                     e.printStackTrace();
