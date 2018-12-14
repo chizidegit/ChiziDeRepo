@@ -257,7 +257,7 @@ public class Main {
 
 先上一张[Stay](https://www.jianshu.com/p/45cb536be2f4)画的整体流程图：
 
-![](https://upload-images.jianshu.io/upload_images/625299-29a632638d9f518f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/891/format/webp)
+![](http://ww1.sinaimg.cn/large/6f97245dgy1fy66jzkn1rj20or0netb2.jpg)
 
 ### 5.1 创建Api实例
 
