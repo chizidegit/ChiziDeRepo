@@ -272,7 +272,8 @@ public <T> T create(final Class<T> service) {
   return (T) Proxy.newProxyInstance(service.getClassLoader(), new Class<?>[] { service },
       new InvocationHandler() {
         private final Platform platform = Platform.get();
-        @Override public Object invoke(Object proxy, Method method, Object... args)
+        private final Object[] emptyArgs = new Object[0];
+        @Override public Object invoke(Object proxy, Method method, @Nullable Object[] args)
             throws Throwable {
           // If the method is a method from Object then defer to normal invocation.
           if (method.getDeclaringClass() == Object.class) {
@@ -281,9 +282,7 @@ public <T> T create(final Class<T> service) {
           if (platform.isDefaultMethod(method)) {
             return platform.invokeDefaultMethod(method, service, proxy, args);
           }
-          ServiceMethod serviceMethod = loadServiceMethod(method);
-          OkHttpCall okHttpCall = new OkHttpCall<>(serviceMethod, args);
-          return serviceMethod.callAdapter.adapt(okHttpCall);
+          return loadServiceMethod(method).invoke(args != null ? args : emptyArgs);
         }
       });
 }
@@ -298,12 +297,13 @@ public <T> T create(final Class<T> service) {
 loadServiceMethod()方法负责加载ServiceMethod：
 
 ```java
-ServiceMethod loadServiceMethod(Method method) {
-  ServiceMethod result;
+ServiceMethod<?> loadServiceMethod(Method method) {
+  ServiceMethod<?> result = serviceMethodCache.get(method);
+  if (result != null) return result;
   synchronized (serviceMethodCache) {
     result = serviceMethodCache.get(method);
     if (result == null) {
-      result = new ServiceMethod.Builder(this, method).build();
+      result = ServiceMethod.parseAnnotations(this, method);
       serviceMethodCache.put(method, result);
     }
   }
@@ -311,28 +311,45 @@ ServiceMethod loadServiceMethod(Method method) {
 }
 ```
 
-看一下ServiceMethod构造方法：
+看一下HttpServiceMethod构造方法：
 
 ```java
-ServiceMethod(Builder<T> builder) {
-  this.callFactory = builder.retrofit.callFactory();
-  this.callAdapter = builder.callAdapter;
-  this.baseUrl = builder.retrofit.baseUrl();
-  this.responseConverter = builder.responseConverter;
-  this.httpMethod = builder.httpMethod;
-  this.relativeUrl = builder.relativeUrl;
-  this.headers = builder.headers;
-  this.contentType = builder.contentType;
-  this.hasBody = builder.hasBody;
-  this.isFormEncoded = builder.isFormEncoded;
-  this.isMultipart = builder.isMultipart;
-  this.parameterHandlers = builder.parameterHandlers;
+private HttpServiceMethod(RequestFactory requestFactory, okhttp3.Call.Factory callFactory,
+    CallAdapter<ResponseT, ReturnT> callAdapter,
+    Converter<ResponseBody, ResponseT> responseConverter) {
+  this.requestFactory = requestFactory;
+  this.callFactory = callFactory;
+  this.callAdapter = callAdapter;
+  this.responseConverter = responseConverter;
 }
 ```
 
-重点有callFactory、callAdapter、responseConverter和parameterHandlers这4个成员变量。
+有requestFactory、callFactory、callAdapter、responseConverter这几个成员变量。
 
-#### 5.2.1 callFactory
+#### 5.2.1 requestFactory
+
+看一下构造方法：
+
+```java
+RequestFactory(Builder builder) {
+  method = builder.method;
+  baseUrl = builder.retrofit.baseUrl;
+  httpMethod = builder.httpMethod;
+  relativeUrl = builder.relativeUrl;
+  headers = builder.headers;
+  contentType = builder.contentType;
+  hasBody = builder.hasBody;
+  isFormEncoded = builder.isFormEncoded;
+  isMultipart = builder.isMultipart;
+  parameterHandlers = builder.parameterHandlers;
+}
+```
+
+里面有一个重要的成员变量parameterHandlers。负责解析Api定义时每个方法的参数，并在构造Http请求时设置相应参数。每个参数都会有一个ParameterHandler，由ServiceMethod#parseParameter方法负责创建，其主要内容就是解析每个参数使用的注解类型（诸如Path，Query，Field 等），对每种类型进行单独的处理。构造Http请求时，我们传递的参数都是字符串，那Retrofit是如何把我们传递的各种参数都转化为String的呢？还是由Retrofit类提供的converter。
+
+Converter.Factory除了提供上一小节提到的responseBodyConverter，还提供requestBodyConverter和stringConverter，Api方法中除了@Body和@Part类型的参数，都利用stringConverter进行转换，而@Body和@Part类型的参数则利用requestBodyConverter进行转换。
+
+#### 5.2.2 callFactory
   
 负责创建Http请求，Http请求被抽象为okhttp3.Call类，它表示一个已经准备好，可以随时执行的Http请求。
 
@@ -345,7 +362,7 @@ if (callFactory == null) {
 
 callFactory实际上由Retrofit类提供，而我们在构造Retrofit对象时，可以指定callFactory，如果不指定，将默认设置为一个okhttp3.OkHttpClient。
 
-#### 5.2.2 callAdapter
+#### 5.2.3 callAdapter
 
 负责把retrofit2.Call<T>转为T（注意和okhttp3.Call区分开来，retrofit2.Call<T>表示的是对一个 Retrofit方法的调用），这个过程会发送一个Http请求，拿到服务器返回的数据（通过okhttp3.Call实现），并把数据转换为声明的T类型对象（通过Converter<F,T> 实现）。
 
@@ -355,7 +372,7 @@ List<CallAdapter.Factory> callAdapterFactories = new ArrayList<>(this.callAdapte
 callAdapterFactories.addAll(platform.defaultCallAdapterFactories(callbackExecutor));
 ```
 
-#### 5.2.3 responseConverter
+#### 5.2.4 responseConverter
 
 responseConverter是Converter<ResponseBody,T> 类型，负责把服务器返回的数据（JSON、XML、二进制或者其他格式，由ResponseBody封装）转化为T类型的对象。
 
@@ -369,12 +386,6 @@ converterFactories.add(new BuiltInConverters());
 converterFactories.addAll(this.converterFactories);
 converterFactories.addAll(platform.defaultConverterFactories());
 ```
-
-#### 5.2.4 parameterHandlers
-
-负责解析Api定义时每个方法的参数，并在构造Http请求时设置相应参数。每个参数都会有一个ParameterHandler，由ServiceMethod#parseParameter方法负责创建，其主要内容就是解析每个参数使用的注解类型（诸如Path，Query，Field 等），对每种类型进行单独的处理。构造Http请求时，我们传递的参数都是字符串，那Retrofit是如何把我们传递的各种参数都转化为String的呢？还是由Retrofit类提供的converter。
-
-Converter.Factory除了提供上一小节提到的responseBodyConverter，还提供requestBodyConverter和stringConverter，Api方法中除了@Body和@Part类型的参数，都利用stringConverter进行转换，而@Body和@Part类型的参数则利用requestBodyConverter进行转换。
 
 ### 5.3 OkHttpCall
 
