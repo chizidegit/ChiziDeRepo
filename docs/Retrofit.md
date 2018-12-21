@@ -345,7 +345,11 @@ RequestFactory(Builder builder) {
 }
 ```
 
-里面有一个重要的成员变量parameterHandlers。负责解析Api定义时每个方法的参数，并在构造Http请求时设置相应参数。每个参数都会有一个ParameterHandler，由ServiceMethod#parseParameter方法负责创建，其主要内容就是解析每个参数使用的注解类型（诸如Path，Query，Field 等），对每种类型进行单独的处理。构造Http请求时，我们传递的参数都是字符串，那Retrofit是如何把我们传递的各种参数都转化为String的呢？还是由Retrofit类提供的converter。
+里面有一个重要的成员变量parameterHandlers。负责解析Api定义时每个方法的参数，并在构造Http请求时设置相应参数。每个参数都会有一个ParameterHandler，由ServiceMethod#parseParameter方法负责创建，其主要内容就是解析每个参数使用的注解类型（诸如Path，Query，Field 等），对每种类型进行单独的处理。看一下ParameterHandler有哪些实现类。
+
+![](http://ww1.sinaimg.cn/large/6f97245dgy1fye87wdi0xj20mu07yt9y.jpg)
+
+构造Http请求时，我们传递的参数都是字符串，那Retrofit是如何把我们传递的各种参数都转化为String的呢？还是由Retrofit类提供的converter。
 
 Converter.Factory除了提供上一小节提到的responseBodyConverter，还提供requestBodyConverter和stringConverter，Api方法中除了@Body和@Part类型的参数，都利用stringConverter进行转换，而@Body和@Part类型的参数则利用requestBodyConverter进行转换。
 
