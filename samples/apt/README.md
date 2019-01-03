@@ -4,9 +4,9 @@
 
 Gradle本身也是个JVM进程，通过执行：
 
-```
-$ ./gradlew --no-daemon -Dorg.gradle.debug=true :app:clean :app:compileDebugJavaWithJavac
 ```gradle
+$ ./gradlew --no-daemon -Dorg.gradle.debug=true :app:clean :app:compileDebugJavaWithJavac
+```
 
 启动Gradle进程，执行后进程将被挂起，直到被某个Debugger附着。
 
