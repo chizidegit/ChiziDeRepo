@@ -7,7 +7,7 @@
     android:orientation="vertical"
     tools:context="com.chizi.fresco.MainActivity">
 
-    <com.facebook.drawee.view.SimpleDraweeView
+    <ImageView
         android:id="@+id/image"
         android:layout_width="130dp"
         android:scaleType="centerInside"
